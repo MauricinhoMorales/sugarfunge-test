@@ -1,8 +1,9 @@
 use futures::future;
+use itertools::Itertools;
 use serde_json::json;
 use sugarfunge_api_types::{primitives::*, *};
 use sugarfunge_test::request::*;
-use tokio::time::{self, sleep, Duration};
+use tokio::time::{sleep, Duration};
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -38,7 +39,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             let class_info = if let Ok(class_info) = class_info {
                 class_info.info.is_some()
             } else {
-                false
+                true
             };
             if !class_info {
                 sleep(Duration::from_millis(delay)).await;
@@ -76,28 +77,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
     }
     println!(
-        "class_ids elapsed: {}",
+        "class_ids elapsed: {}ms",
         class_ids_time.elapsed().as_millis()
     );
 
-    // Generate 100 assets per class
     let all_assets = class_ids_range
         .flat_map(|class_id| {
             asset_ids_range
                 .clone()
                 .map(move |asset_id| (class_id, asset_id))
         })
-        .enumerate()
-        .map(|(i, (class_id, asset_id))| {
+        .chunks(200);
+
+    // Generate 100 assets per class
+    let all_assets = all_assets.into_iter().map(|assets| {
+        assets.enumerate().map(|(i, (class_id, asset_id))| {
             let seed = seeded.seed.clone();
             // let account = seeded.account.clone();
             let class_id = ClassId::from(class_id);
             let asset_id = AssetId::from(asset_id);
 
             async move {
-                let delay = ((i * 100) % 20000) as u64;
-                sleep(Duration::from_millis(delay)).await;
-
                 // Check if asset exists
                 let asset_info: Result<asset::AssetInfoOutput, _> =
                     req("asset/info", asset::AssetInfoInput { class_id, asset_id }).await;
@@ -106,10 +106,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 let asset_info = if let Ok(asset_info) = asset_info {
                     asset_info.info.is_some()
                 } else {
-                    false
+                    true
                 };
                 if !asset_info {
-                    let delay = ((i * 2000) % 100000) as u64;
+                    let delay = (i * 100) as u64;
                     sleep(Duration::from_millis(delay)).await;
 
                     println!("creating: {:?} {:?}", class_id, asset_id);
@@ -135,17 +135,20 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     })
                 }
             }
-        });
+        })
+    });
 
     let asset_ids_time = std::time::Instant::now();
-    let all_assets = future::join_all(all_assets).await;
-    for asset in all_assets {
-        if let Ok(asset) = asset {
-            println!("{:#?}", asset);
+    for assets in all_assets {
+        let all_assets = future::join_all(assets).await;
+        for asset in all_assets {
+            if let Ok(asset) = asset {
+                println!("{:#?}", asset);
+            }
         }
     }
     println!(
-        "asset_ids elapsed: {}",
+        "asset_ids elapsed: {}ms",
         asset_ids_time.elapsed().as_millis()
     );
 
