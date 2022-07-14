@@ -13,5 +13,14 @@ futures = "0.3"
 rand = "0.8"
 itertools = "0.10"
 
+[dev-dependencies]
+anyhow = "1.0"
+
+[dev-dependencies.sp-core]
+git = "https://github.com/paritytech/substrate.git"
+branch = "polkadot-v0.9.23"
+package = "sp-core"
+features = ["full_crypto"]
+
 [lib]
 path = "src/lib.rs"
